@@ -1,0 +1,191 @@
+import { useState, useEffect, useMemo } from 'react';
+import { SPEAKERS_DATA } from './data/speakersData';
+import { Speaker, SpeakerStatus } from './types/speaker';
+import { getSavedStatuses, saveSpeakerStatus } from './utils/storage';
+import { sortSpeakersByDefaultPriority } from './utils/sorting';
+import { GalleryHeader } from './components/GalleryHeader';
+import { FilterBar, FilterOption } from './components/FilterBar';
+import { SpeakerCard } from './components/SpeakerCard';
+import { SpeakerPageLayout } from './components/SpeakerPageLayout';
+
+export function App() {
+  // Saved statuses map
+  const [statuses, setStatuses] = useState<Record<string, SpeakerStatus>>(() => getSavedStatuses());
+
+  // Filter option state
+  const [activeFilter, setActiveFilter] = useState<FilterOption>('all');
+
+  // Route state: null = gallery, string = speaker id
+  const [currentSpeakerId, setCurrentSpeakerId] = useState<string | null>(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith('#speaker/')) {
+      return hash.replace('#speaker/', '');
+    }
+    const path = window.location.pathname;
+    if (path.startsWith('/speaker/')) {
+      return path.replace('/speaker/', '');
+    }
+    return null;
+  });
+
+  // Handle route changes
+  useEffect(() => {
+    const handlePopState = () => {
+      const hash = window.location.hash;
+      if (hash.startsWith('#speaker/')) {
+        setCurrentSpeakerId(hash.replace('#speaker/', ''));
+        return;
+      }
+      const path = window.location.pathname;
+      if (path.startsWith('/speaker/')) {
+        setCurrentSpeakerId(path.replace('/speaker/', ''));
+        return;
+      }
+      setCurrentSpeakerId(null);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handlePopState);
+    };
+  }, []);
+
+  // Update status handler
+  const handleStatusChange = (speakerId: string, newStatus: SpeakerStatus) => {
+    const updated = saveSpeakerStatus(speakerId, newStatus);
+    setStatuses(updated);
+  };
+
+  // Navigate to speaker page
+  const handleSelectSpeaker = (speakerId: string) => {
+    window.location.hash = `speaker/${speakerId}`;
+    setCurrentSpeakerId(speakerId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Back to gallery
+  const handleBackToGallery = () => {
+    window.location.hash = '';
+    setCurrentSpeakerId(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Map speakers with their persistent statuses
+  const speakersWithStatus: Speaker[] = useMemo(() => {
+    return SPEAKERS_DATA.map((sp) => ({
+      ...sp,
+      status: statuses[sp.id] || 'not_interviewed',
+    }));
+  }, [statuses]);
+
+  // Priority sorted speakers
+  const sortedSpeakers = useMemo(() => {
+    return sortSpeakersByDefaultPriority(speakersWithStatus);
+  }, [speakersWithStatus]);
+
+  // Counts for filter bar
+  const filterCounts = useMemo(() => {
+    const counts: Record<FilterOption, number> = {
+      all: speakersWithStatus.length,
+      not_interviewed: 0,
+      postponed: 0,
+      failed: 0,
+      completed: 0,
+    };
+    speakersWithStatus.forEach((sp) => {
+      if (counts[sp.status] !== undefined) {
+        counts[sp.status]++;
+      }
+    });
+    return counts;
+  }, [speakersWithStatus]);
+
+  // Filtered speakers
+  const displayedSpeakers = useMemo(() => {
+    if (activeFilter === 'all') {
+      return sortedSpeakers;
+    }
+    return sortedSpeakers.filter((sp) => sp.status === activeFilter);
+  }, [sortedSpeakers, activeFilter]);
+
+  // Current selected speaker object
+  const selectedSpeaker = useMemo(() => {
+    if (!currentSpeakerId) return null;
+    return speakersWithStatus.find((sp) => sp.id === currentSpeakerId) || null;
+  }, [speakersWithStatus, currentSpeakerId]);
+
+  // If a speaker route is active, render Speaker Page Layout
+  if (selectedSpeaker) {
+    return (
+      <SpeakerPageLayout
+        speaker={selectedSpeaker}
+        onBackToGallery={handleBackToGallery}
+        onStatusChange={handleStatusChange}
+      />
+    );
+  }
+
+  // Otherwise render Gallery Index Page
+  return (
+    <div className="min-h-screen bg-[#0d0e12] text-gray-100 flex flex-col">
+      <GalleryHeader />
+
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+        {/* Controls Bar: Filters & Summary */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#11131a] p-4 rounded-2xl border border-gray-800">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-300">
+              Filter Speakers by Status
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Default priority: Unprocessed → Postponed → Failed → Completed
+            </p>
+          </div>
+
+          <FilterBar
+            activeFilter={activeFilter}
+            onFilterChange={setActiveFilter}
+            counts={filterCounts}
+          />
+        </div>
+
+        {/* Gallery Grid: 6 columns on xl/2xl, scaling down to 1 column on mobile */}
+        {displayedSpeakers.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 sm:gap-5">
+            {displayedSpeakers.map((speaker) => (
+              <SpeakerCard
+                key={speaker.id}
+                speaker={speaker}
+                onSelectSpeaker={handleSelectSpeaker}
+                onStatusChange={handleStatusChange}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-16 bg-[#11131a] rounded-2xl border border-gray-800">
+            <p className="text-gray-400 text-sm font-medium">
+              No speakers found matching the selected filter.
+            </p>
+            <button
+              onClick={() => setActiveFilter('all')}
+              className="mt-3 text-xs text-[#D4AF37] hover:underline"
+            >
+              Reset Filter
+            </button>
+          </div>
+        )}
+
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-800/80 bg-[#11131a] py-6 text-center text-xs text-gray-500">
+        <p>Rally Speaker Interview Gallery • 18 Speakers • 2026</p>
+      </footer>
+    </div>
+  );
+}
+
+export default App;
