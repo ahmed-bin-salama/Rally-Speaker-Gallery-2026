@@ -7,6 +7,29 @@ import { GalleryHeader } from './components/GalleryHeader';
 import { FilterBar, FilterOption } from './components/FilterBar';
 import { SpeakerCard } from './components/SpeakerCard';
 import { SpeakerPageLayout } from './components/SpeakerPageLayout';
+import { RandomInterviewPage } from './random-interview/RandomInterviewPage';
+
+type AppView = { type: 'gallery' } | { type: 'speaker'; speakerId: string } | { type: 'random-interview' };
+
+function parseRoute(): AppView {
+  const hash = window.location.hash;
+  if (hash === '#random-interview') {
+    return { type: 'random-interview' };
+  }
+  if (hash.startsWith('#speaker/')) {
+    return { type: 'speaker', speakerId: hash.replace('#speaker/', '') };
+  }
+
+  const path = window.location.pathname;
+  if (path === '/random-interview' || path.startsWith('/random-interview/')) {
+    return { type: 'random-interview' };
+  }
+  if (path.startsWith('/speaker/')) {
+    return { type: 'speaker', speakerId: path.replace('/speaker/', '') };
+  }
+
+  return { type: 'gallery' };
+}
 
 export function App() {
   // Saved statuses map
@@ -15,33 +38,13 @@ export function App() {
   // Filter option state
   const [activeFilter, setActiveFilter] = useState<FilterOption>('all');
 
-  // Route state: null = gallery, string = speaker id
-  const [currentSpeakerId, setCurrentSpeakerId] = useState<string | null>(() => {
-    const hash = window.location.hash;
-    if (hash.startsWith('#speaker/')) {
-      return hash.replace('#speaker/', '');
-    }
-    const path = window.location.pathname;
-    if (path.startsWith('/speaker/')) {
-      return path.replace('/speaker/', '');
-    }
-    return null;
-  });
+  // Route state
+  const [currentView, setCurrentView] = useState<AppView>(parseRoute);
 
   // Handle route changes
   useEffect(() => {
     const handlePopState = () => {
-      const hash = window.location.hash;
-      if (hash.startsWith('#speaker/')) {
-        setCurrentSpeakerId(hash.replace('#speaker/', ''));
-        return;
-      }
-      const path = window.location.pathname;
-      if (path.startsWith('/speaker/')) {
-        setCurrentSpeakerId(path.replace('/speaker/', ''));
-        return;
-      }
-      setCurrentSpeakerId(null);
+      setCurrentView(parseRoute());
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -61,14 +64,21 @@ export function App() {
   // Navigate to speaker page
   const handleSelectSpeaker = (speakerId: string) => {
     window.location.hash = `speaker/${speakerId}`;
-    setCurrentSpeakerId(speakerId);
+    setCurrentView({ type: 'speaker', speakerId });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Open Random Interview Page
+  const handleOpenRandomInterview = () => {
+    window.location.hash = 'random-interview';
+    setCurrentView({ type: 'random-interview' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Back to gallery
   const handleBackToGallery = () => {
     window.location.hash = '';
-    setCurrentSpeakerId(null);
+    setCurrentView({ type: 'gallery' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -110,13 +120,18 @@ export function App() {
     return sortedSpeakers.filter((sp) => sp.status === activeFilter);
   }, [sortedSpeakers, activeFilter]);
 
-  // Current selected speaker object
+  // Selected speaker object if in speaker view
   const selectedSpeaker = useMemo(() => {
-    if (!currentSpeakerId) return null;
-    return speakersWithStatus.find((sp) => sp.id === currentSpeakerId) || null;
-  }, [speakersWithStatus, currentSpeakerId]);
+    if (currentView.type !== 'speaker') return null;
+    return speakersWithStatus.find((sp) => sp.id === currentView.speakerId) || null;
+  }, [speakersWithStatus, currentView]);
 
-  // If a speaker route is active, render Speaker Page Layout
+  // Render Random Interview Page
+  if (currentView.type === 'random-interview') {
+    return <RandomInterviewPage onBackToGallery={handleBackToGallery} />;
+  }
+
+  // Render Speaker Page
   if (selectedSpeaker) {
     return (
       <SpeakerPageLayout
@@ -127,10 +142,10 @@ export function App() {
     );
   }
 
-  // Otherwise render Gallery Index Page
+  // Render Gallery Index Page
   return (
     <div className="min-h-screen bg-[#0d0e12] text-gray-100 flex flex-col">
-      <GalleryHeader />
+      <GalleryHeader onOpenRandomInterview={handleOpenRandomInterview} />
 
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
