@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
-  base: '/Rally-Speaker-Gallery-2026/',
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {
