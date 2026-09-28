@@ -13,19 +13,22 @@ type AppView = { type: 'gallery' } | { type: 'speaker'; speakerId: string } | { 
 
 function parseRoute(): AppView {
   const hash = window.location.hash;
-  if (hash === '#random-interview') {
+  if (hash === '#random-interview' || hash === '#/random-interview') {
     return { type: 'random-interview' };
   }
   if (hash.startsWith('#speaker/')) {
-    return { type: 'speaker', speakerId: hash.replace('#speaker/', '') };
+    const rawId = hash.replace('#speaker/', '');
+    const speakerId = decodeURIComponent(rawId);
+    if (speakerId) {
+      return { type: 'speaker', speakerId };
+    }
   }
-
-  const path = window.location.pathname;
-  if (path === '/random-interview' || path.startsWith('/random-interview/')) {
-    return { type: 'random-interview' };
-  }
-  if (path.startsWith('/speaker/')) {
-    return { type: 'speaker', speakerId: path.replace('/speaker/', '') };
+  if (hash.startsWith('#/speaker/')) {
+    const rawId = hash.replace('#/speaker/', '');
+    const speakerId = decodeURIComponent(rawId);
+    if (speakerId) {
+      return { type: 'speaker', speakerId };
+    }
   }
 
   return { type: 'gallery' };
@@ -45,6 +48,7 @@ export function App() {
   useEffect(() => {
     const handlePopState = () => {
       setCurrentView(parseRoute());
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -63,7 +67,7 @@ export function App() {
 
   // Navigate to speaker page
   const handleSelectSpeaker = (speakerId: string) => {
-    window.location.hash = `speaker/${speakerId}`;
+    window.location.hash = `speaker/${encodeURIComponent(speakerId)}`;
     setCurrentView({ type: 'speaker', speakerId });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
